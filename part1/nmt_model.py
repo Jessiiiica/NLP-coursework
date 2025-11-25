@@ -265,7 +265,10 @@ class NMT(nn.Module):
         # Need to compute batched matrix multiplication between dec_hidden and enc_hiddens_proj
         # dec_hidden has a shape of (b, h), enc_hiddens_proj is (b, src_len, h)
         # We want to end up with a shape of (b, src_len)
+
+        #expand dec_hidden to get a shape that is able to be multipled with enc_hiddens_proj
         dec_hidden_expanded = dec_hidden.unsqueeze(2)
+        #do batched matrix multiplication then squeeze this down to the shape we want of (b, src_len)
         e_t = torch.bmm(enc_hiddens_proj, dec_hidden_expanded).squeeze(2)
 
         # If enc_masks is None, this step should be skipped
@@ -276,12 +279,17 @@ class NMT(nn.Module):
             e_t = e_t.masked_fill(enc_masks.bool(), float("-inf"))
 
         # 3. Apply softmax to e_t to yield alpha_t of shape (b, src_len)
+
+        #Apply our softmax across the src_len
         alpha_t = torch.softmax(e_t, dim=1)
+        #Have an expanded version to use for caluclations later on
         alpha_t_expanded = alpha_t.unsqueeze(1)
 
         # 4. Use batched matrix multiplication between alpha_t and enc_hiddens
         # alpha_t has a shape of (b, src_len), enc_hiddens is (b, src_len, 2h)
         # We want to end up with a shape of (b, 2h)
+
+        #Use expanded alpha_t to do batch matrix multiplication with enc_hiddens and squeeze to end up with the wanted shape of (b, 2h)
         attention_t = torch.bmm(alpha_t_expanded, enc_hiddens).squeeze(1)
 
         # 5. Concatenate dec_hidden with attention_t to compute tensor u_t
