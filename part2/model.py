@@ -122,37 +122,52 @@ class CausalSelfAttention(nn.Module):
         """
         B, T, C = x.size()
         ### Your code here (~8-15 lines) ###
+        # This "head dimension" is used to reshape Q, K, V into multiple heads
         dimentions = C // self.n_head
         # Step 1: Calculate query, key, values for all heads
         # (B, nh, T, hs)
+        # We apply three linear layers to x:
+        # Query: represents what the token is "looking for"
+        # Key:   represents what information the token "offers"
+        # Value: the actual information 
+        # All stay shape (B, T, C). Only the meaning changes.
         query = self.query(x)
         key = self.key(x)
         value = self.value(x)
 
+        # This reshapes the tensor into multiple attention heads
+        # so each head can focus on different patterns in the input
         query = query.view(B, T, self.n_head, dimentions).transpose(1,2)
         key = key.view(B, T, self.n_head, dimentions).transpose(1,2)
         value = value.view(B, T, self.n_head, dimentions).transpose(1,2)
 
         # Step 2: Compute attention scores
         # Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
+        # Scaling by sqrt prevents extremely large dot products
         attention = (query @ key.transpose(-2,-1)) / math.sqrt(dimentions)
 
         # Step 3: Masking out the future tokens (causal) and softmax
+        # Causal mask ensures each position can only attend backward, not forward
         attention = attention.masked_fill(self.mask[:,:,:T,:T] == 0, float("-inf"))
+        # Convert scores to probability distribution across tokens
         attention = F.softmax(attention, dim = -1)
 
         # Step 4: Compute the attention output
         # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+        #Apply weight to the value matrix
         f = attention @ value
 
         # Step 5: re-assemble all head outputs side by side
         # (B, T, nh, hs) -> (B, T, C)
-
+        # Head outputs are concatenated to keep each head’s information distinct
         f = f.transpose(1, 2).contiguous().view(B, T, C)
 
         # Step 6: output projection + dropout
+        # A final linear layer mixes information across all heads
+        # Dropout helps prevent overfitting
         f = self.resid_drop(self.proj(f))
 
+        #Optionally return the attention mar=trix
         attention = attention if output_attentions else None 
         ### End of your code ###
         return GPTAttentionOutput(output=f, attentions=attention)
